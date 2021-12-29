@@ -12,10 +12,8 @@ from jsonschema import validate
 from pathlib import Path
 import json
 
-
 api_bp = Blueprint("api_v2", __name__)
 api = Api(api_bp, version="2.0", title="Curiefense configuration API server v2.0")
-
 
 ns_configs = api.namespace("configs", description="Configurations")
 ns_db = api.namespace("db", description="Database")
@@ -266,7 +264,6 @@ m_document_list_entry = api.model(
     },
 )
 
-
 m_config_documents = api.model(
     "Config Documents",
     {x: fields.List(fields.Nested(models[x], default=[])) for x in models},
@@ -319,10 +316,10 @@ m_giturl = api.model(
     },
 )
 
-
 ### Db
 
 m_db = api.model("db", {})
+
 
 ### Document Schema validation
 
@@ -332,8 +329,12 @@ def validateJson(json_data, schema_type):
         validate(instance=json_data, schema=schema_type_map[schema_type])
     except jsonschema.exceptions.ValidationError as err:
         print(str(err))
-        return False
-    return True
+        path = list(err.schema_path)
+        err_msg = err.message
+        if path[0] == 'properties':
+            err_msg = "{} value: {}".format(path[1], err_msg )
+        return False, err_msg
+    return True, "Ok"
 
 
 base_path = Path(__file__).parent
@@ -348,7 +349,7 @@ securitypolicies_file_path = (base_path / "./json/security-policies.schema").res
 with open(securitypolicies_file_path) as json_file:
     securitypolicies_schema = json.load(json_file)
 content_filter_profile_file_path = (
-    base_path / "./json/content-filter-profile.schema"
+        base_path / "./json/content-filter-profile.schema"
 ).resolve()
 with open(content_filter_profile_file_path) as json_file:
     content_filter_profile_schema = json.load(json_file)
@@ -359,16 +360,15 @@ flowcontrol_file_path = (base_path / "../json/flow-control.schema").resolve()
 with open(flowcontrol_file_path) as json_file:
     flowcontrol_schema = json.load(json_file)
 content_filter_rule_file_path = (
-    base_path / "./json/content-filter-rule.schema"
+        base_path / "./json/content-filter-rule.schema"
 ).resolve()
 with open(content_filter_rule_file_path) as json_file:
     content_filter_rule_schema = json.load(json_file)
 content_filter_groups_file_path = (
-    base_path / "./json/content-filter-groups.schema"
+        base_path / "./json/content-filter-groups.schema"
 ).resolve()
 with open(content_filter_groups_file_path) as json_file:
     content_filter_groups_schema = json.load(json_file)
-
 
 schema_type_map = {
     "ratelimits": ratelimits_schema,
@@ -636,13 +636,14 @@ class EntryResource(Resource):
         "Update an entry in a document"
         if document not in models:
             abort(404, "document does not exist")
-        isValid = validateJson(request.json, document)
+        isValid, reason = validateJson(request.json, document)
+
         if isValid:
             data = marshal(request.json, models[document], skip_none=True)
             res = current_app.backend.entries_update(config, document, entry, data)
             return res
         else:
-            abort(500, "schema mismatched")
+            abort(500, "schema mismatched because the {}".format(reason))
 
     def delete(self, config, document, entry):
         "Delete an entry from a document"

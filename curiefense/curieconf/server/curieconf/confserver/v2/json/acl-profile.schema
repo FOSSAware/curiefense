@@ -7,7 +7,8 @@
             "title": "Tags List",
             "description": "List of tags for which to apply the rule",
             "type": "array",
-            "items": { "type": "string" }
+            "items": { "type": "string" },
+            "uniqueItems": true
         }
     },
     "type": "object",
@@ -15,7 +16,8 @@
         "id": {
             "type": "string",
             "title": "Id",
-            "description": "Unique id"
+            "description": "Unique id",
+            "minLength": 1
         },
         "name": {
             "type": "string",
@@ -30,5 +32,7 @@
         "force_deny": { "$ref": "#/definitions/tags_array" },
         "deny": { "$ref": "#/definitions/tags_array" }
     },
-    "required": [ "id", "name", "allow", "allow_bot", "deny_bot", "passthrough", "force_deny", "deny" ]
+    "required": [ "id", "name", "allow", "allow_bot", "deny_bot", "passthrough", "force_deny", "deny" ],
+    "additionalProperties": false
+
 }
