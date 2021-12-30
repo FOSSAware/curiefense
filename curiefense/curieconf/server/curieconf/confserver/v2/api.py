@@ -139,15 +139,16 @@ m_contentfilterprofile = api.model(
 m_aclprofile = api.model(
     "ACL Profile",
     {
-        "id": fields.String(required=True),
-        "name": fields.String(required=True),
-        "allow": fields.List(fields.String()),
-        "allow_bot": fields.List(fields.String()),
-        "deny_bot": fields.List(fields.String()),
-        "passthrough": fields.List(fields.String()),
-        "deny": fields.List(fields.String()),
-        "force_deny": fields.List(fields.String()),
+        "id": fields.String(required=True, min_length=1, title="Id", description="Unique id"),
+        "name": fields.String(required=True, min_length=1, title="Name", description="Name of entity shown in UI"),
+        "allow": fields.List(fields.String(), unique=True, required=True),
+        "allow_bot": fields.List(fields.String(), unique=True, required=True),
+        "deny_bot": fields.List(fields.String(), unique=True, required=True),
+        "passthrough": fields.List(fields.String(), unique=True, required=True),
+        "deny": fields.List(fields.String(), unique=True, required=True),
+        "force_deny": fields.List(fields.String(), unique=True, required=True),
     },
+    strict=True
 )
 
 # Global Filter
@@ -332,16 +333,16 @@ def validateJson(json_data, schema_type):
         path = list(err.schema_path)
         err_msg = err.message
         if path[0] == 'properties':
-            err_msg = "{} value: {}".format(path[1], err_msg )
+            err_msg = "{} value: {}".format(path[1], err_msg)
         return False, err_msg
     return True, "Ok"
 
 
 base_path = Path(__file__).parent
 # base_path = "/etc/curiefense/json/"
-acl_profile_file_path = (base_path / "./json/acl-profile.schema").resolve()
-with open(acl_profile_file_path) as json_file:
-    acl_profile_schema = json.load(json_file)
+# acl_profile_file_path = (base_path / "./json/acl-profile.schema").resolve()
+# with open(acl_profile_file_path) as json_file:
+#     acl_profile_schema = json.load(json_file)
 ratelimits_file_path = (base_path / "./json/rate-limits.schema").resolve()
 with open(ratelimits_file_path) as json_file:
     ratelimits_schema = json.load(json_file)
@@ -374,7 +375,7 @@ schema_type_map = {
     "ratelimits": ratelimits_schema,
     "securitypolicies": securitypolicies_schema,
     "contentfilterprofiles": content_filter_profile_schema,
-    "aclprofiles": acl_profile_schema,
+    "aclprofiles": m_aclprofile._schema,
     "globalfilters": globalfilters_schema,
     "flowcontrol": flowcontrol_schema,
     "contentfilterrules": content_filter_rule_schema,
@@ -618,9 +619,13 @@ class EntriesResource(Resource):
         "Create an entry in a document"
         if document not in models:
             abort(404, "document does not exist")
-        data = marshal(request.json, models[document], skip_none=True)
-        res = current_app.backend.entries_create(config, document, data)
-        return res
+        isValid, reason = validateJson(request.json, document)
+        if isValid:
+            data = marshal(request.json, models[document], skip_none=True)
+            res = current_app.backend.entries_create(config, document, data)
+            return res
+        else:
+            abort(500, "schema mismatched because the {}".format(reason))
 
 
 @ns_configs.route("/<string:config>/d/<string:document>/e/<string:entry>/")
@@ -655,6 +660,7 @@ class EntryResource(Resource):
 
 @ns_configs.route("/<string:config>/d/<string:document>/e/<string:entry>/edit/")
 class EntryEditResource(Resource):
+    @ns_configs.expect(m_edit, validate=True)
     def put(self, config, document, entry):
         "Update an entry in a document"
         if document not in models:
